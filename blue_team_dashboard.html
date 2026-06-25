@@ -1,0 +1,134 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>eSoccer AML — Blue Team</title>
+<style>
+  :root { --bg:#0B0E12; --panel:#13181F; --line:#232A33; --ink:#E6EAEF;
+    --muted:#7C8794; --cyan:#3FB6C9; --cyan-dim:#1f5a64; --risk:#E5564B;
+    --ok:#4FB477; --amber:#E2A93B; }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);line-height:1.45;
+    font-family:ui-sans-serif,-apple-system,"Helvetica Neue",Arial,sans-serif;}
+  .mono{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-variant-numeric:tabular-nums;}
+  .wrap{max-width:1080px;margin:0 auto;padding:30px 22px 60px;}
+  header{border-bottom:1px solid var(--line);padding-bottom:16px;margin-bottom:24px;
+    display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:12px;}
+  .title{font-size:13px;letter-spacing:.26em;text-transform:uppercase;color:var(--muted);}
+  .title b{color:var(--ink);} .title .cyan{color:var(--cyan);}
+  .meta{text-align:right;font-size:11px;letter-spacing:.12em;color:var(--muted);}
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:22px;}
+  .kpi{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:15px 16px;}
+  .kpi .lab{font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--muted);margin-bottom:9px;}
+  .kpi .num{font-size:23px;font-weight:600;} .kpi.ok .num{color:var(--ok);} .kpi.cy .num{color:var(--cyan);}
+  .kpi .num small{font-size:11px;color:var(--muted);font-weight:400;}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:18px;margin-bottom:16px;}
+  .card h2{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--cyan);margin:0 0 6px;}
+  .card .sub{font-size:12px;color:var(--muted);margin:0 0 14px;}
+  table{width:100%;border-collapse:collapse;font-size:12.5px;}
+  th{text-align:left;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);
+    border-bottom:1px solid var(--line);padding:0 8px 9px 0;}
+  td{padding:9px 8px 9px 0;border-bottom:1px solid var(--line);} tr:last-child td{border-bottom:none;}
+  .right{text-align:right;} .center{text-align:center;} .f1{color:var(--cyan);}
+  .sig{color:var(--muted);font-size:11px;}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+  .bar-row{display:grid;grid-template-columns:1fr 48px;align-items:center;gap:6px 10px;margin-bottom:14px;}
+  .bar-label{font-size:12.5px;grid-column:1/2;} .cnt{color:var(--muted);font-size:11px;margin-left:8px;}
+  .bar-track{grid-column:1/2;height:6px;background:#1d242c;border-radius:3px;}
+  .bar-fill{height:100%;background:linear-gradient(90deg,var(--cyan-dim),var(--cyan));border-radius:3px;}
+  .bar-val{grid-column:2/3;grid-row:1/3;text-align:right;font-size:12.5px;color:var(--amber);}
+  .insight{background:#171008;border:1px solid #3a2c12;border-radius:4px;padding:14px 16px;
+    font-size:13px;color:#E9D8B5;margin-bottom:16px;} .insight b{color:var(--amber);}
+  .legend{display:flex;gap:14px;font-size:11px;color:var(--muted);margin-top:8px;flex-wrap:wrap;}
+  .legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;vertical-align:middle;}
+  footer{margin-top:22px;padding-top:16px;border-top:1px solid var(--line);font-size:11px;color:var(--muted);line-height:1.7;}
+  @media (max-width:760px){.kpis{grid-template-columns:repeat(2,1fr);} .grid{grid-template-columns:1fr;}}
+</style></head><body><div class="wrap">
+  <header>
+    <div class="title"><span class="cyan">&#9670;</span> eSOCCER AML &nbsp;&middot;&nbsp;
+      <b>Blue Team — Ring Detection</b></div>
+    <div class="meta">NETWORKX + COMBINATION SCORING<br>SYNTHETIC SPORTSBOOK &middot; 5,284 ACCOUNTS</div>
+  </header>
+
+  <div class="kpis">
+    <div class="kpi cy"><div class="lab">Precision</div><div class="num">69%
+      <small>vs 4% naive</small></div></div>
+    <div class="kpi cy"><div class="lab">Recall</div><div class="num">72%</div></div>
+    <div class="kpi"><div class="lab">Alerts raised</div><div class="num">67
+      <small>/ 64 fraud</small></div></div>
+    <div class="kpi ok"><div class="lab">Legit cleared</div><div class="num">5,199<small>/ 5,220</small></div></div>
+  </div>
+
+  <div class="insight">
+    <b>Two honest limits, not a perfect score.</b> Naive single-signal rules flag
+    every shared-IP household and land at <b>~4%</b>
+    precision. Scoring the full combination lifts that to
+    <b>69%</b> at <b>72%</b>
+    recall, clearing <b>5,199 of 5,220</b> legitimate accounts —
+    but it catches the <i>obvious</i> rings and <b>misses the stealth ones</b>
+    (small, uneven, slow washes that sit under the threshold). And precision caps
+    here: a residual set of legitimate bettors place coincidental large opposing
+    co-bets that are behaviourally <i>indistinguishable</i> from washing on
+    transaction data alone. Closing either gap costs the other — tighter rules
+    miss more stealth, looser rules flood analysts. Real resolution needs context
+    behaviour can't see: KYC, source-of-funds, cross-book history.
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Who got flagged — fraud vs. the look-alikes</h2>
+      <p class="sub">The naive rules drowned in the green rows. This detector clears them.</p>
+      <table><thead><tr><th>Population</th><th class="right">Accounts</th><th class="right">Flagged</th></tr></thead>
+      <tbody><tr><td>Legit — normal</td><td class="mono right">5000</td><td class="mono right" style="color:#4FB477">1/5000 flagged</td></tr><tr><td>Legit — household (look-alike)</td><td class="mono right">100</td><td class="mono right" style="color:#4FB477">0/100 flagged</td></tr><tr><td>Legit — budget micro-deposit</td><td class="mono right">60</td><td class="mono right" style="color:#4FB477">0/60 flagged</td></tr><tr><td>Legit — fast-withdraw VIP</td><td class="mono right">40</td><td class="mono right" style="color:#4FB477">0/40 flagged</td></tr><tr><td>Fraud — careful ring</td><td class="mono right">24</td><td class="mono right" style="color:#E5564B">24/24 flagged</td></tr><tr><td>Fraud — sloppy ring</td><td class="mono right">22</td><td class="mono right" style="color:#E5564B">22/22 flagged</td></tr><tr><td>arber</td><td class="mono right">20</td><td class="mono right" style="color:#4FB477">20/20 flagged</td></tr><tr><td>Fraud — stealth ring</td><td class="mono right">18</td><td class="mono right" style="color:#E5564B">0/18 flagged</td></tr></tbody></table>
+    </div>
+    <div class="card">
+      <h2>One recovered ring</h2>
+      <p class="sub">Linkage + matched bet reconstruct the pair.</p>
+      <svg viewBox="0 0 460 250" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;">
+      <line x1="90" y1="70" x2="230" y2="125" stroke="#E5564B" stroke-width="1.5" opacity="0.6"/>
+      <line x1="90" y1="180" x2="230" y2="125" stroke="#E5564B" stroke-width="1.5" opacity="0.6"/>
+      <line x1="90" y1="70" x2="90" y2="180" stroke="#E2A93B" stroke-width="1.4" stroke-dasharray="5 4" opacity="0.8"/>
+      <circle cx="90" cy="70" r="13" fill="#E5564B" stroke="#E6EAEF" stroke-width="1.5"/>
+      <circle cx="90" cy="180" r="13" fill="#E5564B" stroke="#E6EAEF" stroke-width="1.5"/>
+      <rect x="232" y="110" width="150" height="30" rx="4" fill="#1d242c" stroke="#3FB6C9"/>
+      <text x="307" y="129" text-anchor="middle" fill="#3FB6C9" font-family="ui-monospace,monospace" font-size="11">eSoccer fixture</text>
+      <text x="90" y="46" text-anchor="middle" fill="#E6EAEF" font-family="ui-monospace,monospace" font-size="10">USR_05221</text>
+      <text x="90" y="210" text-anchor="middle" fill="#E6EAEF" font-family="ui-monospace,monospace" font-size="10">USR_05222</text>
+      <text x="165" y="88" fill="#9aa3ad" font-family="ui-monospace,monospace" font-size="9">OVER</text>
+      <text x="165" y="170" fill="#9aa3ad" font-family="ui-monospace,monospace" font-size="9">UNDER</text>
+      <text x="105" y="128" fill="#E2A93B" font-family="ui-monospace,monospace" font-size="9">shared payout</text>
+      <text x="230" y="165" text-anchor="middle" fill="#7C8794" font-family="ui-monospace,monospace" font-size="10">ring RING_000 recovered</text>
+    </svg>
+      <div class="legend"><span><i style="background:#E5564B"></i>flagged mule</span>
+        <span><i style="background:#E2A93B"></i>shared identifier</span>
+        <span><i style="background:#3FB6C9"></i>opposing bets</span></div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Recall by ring tradecraft</h2>
+      <p class="sub">Sloppy rings are easy; careful rings (no shared IP) are the test.</p>
+      <div class="bar-row"><div class="bar-label">Fraud — sloppy ring<span class="cnt mono">22/22</span></div><div class="bar-track"><div class="bar-fill" style="width:100%"></div></div><div class="bar-val mono">100%</div></div><div class="bar-row"><div class="bar-label">Fraud — careful ring<span class="cnt mono">24/24</span></div><div class="bar-track"><div class="bar-fill" style="width:100%"></div></div><div class="bar-val mono">100%</div></div><div class="bar-row"><div class="bar-label">Fraud — stealth ring<span class="cnt mono">0/18</span></div><div class="bar-track"><div class="bar-fill" style="width:0%"></div></div><div class="bar-val mono">0%</div></div>
+    </div>
+    <div class="card">
+      <h2>Precision / recall vs. threshold</h2>
+      <p class="sub">The operating-point tradeoff (row in use: 70).</p>
+      <table><thead><tr><th class="center">Score &ge;</th><th class="right">Flagged</th>
+      <th class="right">Prec.</th><th class="right">Recall</th><th class="right">F1</th></tr></thead>
+      <tbody><tr><td class="mono center">40</td><td class="mono right">102</td><td class="mono right">63%</td><td class="mono right">100%</td><td class="mono right f1">77%</td></tr><tr><td class="mono center">50</td><td class="mono right">102</td><td class="mono right">63%</td><td class="mono right">100%</td><td class="mono right f1">77%</td></tr><tr><td class="mono center">60</td><td class="mono right">92</td><td class="mono right">70%</td><td class="mono right">100%</td><td class="mono right f1">82%</td></tr><tr style="background:#10161d;font-weight:600"><td class="mono center">70</td><td class="mono right">67</td><td class="mono right">69%</td><td class="mono right">72%</td><td class="mono right f1">70%</td></tr><tr><td class="mono center">80</td><td class="mono right">66</td><td class="mono right">70%</td><td class="mono right">72%</td><td class="mono right f1">71%</td></tr></tbody></table>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Top alerts</h2>
+    <table><thead><tr><th>Account</th><th class="center">Score</th><th>Signals fired</th>
+    <th class="center">Cluster</th><th>Status</th></tr></thead>
+    <tbody><tr><td class="mono">USR_05238</td><td class="mono center">120</td><td class="sig">identity-linked, matched co-bet, large stake, near-equal, synchronized, single large bet, new account</td><td class="mono center">2</td><td><span style="color:#E5564B;font-size:10px">CONFIRMED</span></td></tr><tr><td class="mono">USR_05239</td><td class="mono center">120</td><td class="sig">identity-linked, matched co-bet, large stake, near-equal, synchronized, single large bet, new account</td><td class="mono center">2</td><td><span style="color:#E5564B;font-size:10px">CONFIRMED</span></td></tr><tr><td class="mono">USR_05240</td><td class="mono center">120</td><td class="sig">identity-linked, matched co-bet, large stake, near-equal, synchronized, single large bet, new account</td><td class="mono center">2</td><td><span style="color:#E5564B;font-size:10px">CONFIRMED</span></td></tr><tr><td class="mono">USR_05274</td><td class="mono center">120</td><td class="sig">identity-linked, matched co-bet, large stake, near-equal, synchronized, single large bet, new account</td><td class="mono center">2</td><td><span style="color:#E5564B;font-size:10px">CONFIRMED</span></td></tr><tr><td class="mono">USR_05273</td><td class="mono center">120</td><td class="sig">identity-linked, matched co-bet, large stake, near-equal, synchronized, single large bet, new account</td><td class="mono center">2</td><td><span style="color:#E5564B;font-size:10px">CONFIRMED</span></td></tr><tr><td class="mono">USR_05269</td><td class="mono center">120</td><td class="sig">identity-linked, matched co-bet, large stake, near-equal, synchronized, single large bet, new account</td><td class="mono center">2</td><td><span style="color:#E5564B;font-size:10px">CONFIRMED</span></td></tr><tr><td class="mono">USR_05237</td><td class="mono center">120</td><td class="sig">identity-linked, matched co-bet, large stake, near-equal, synchronized, single large bet, new account</td><td class="mono center">2</td><td><span style="color:#E5564B;font-size:10px">CONFIRMED</span></td></tr><tr><td class="mono">USR_05223</td><td class="mono center">120</td><td class="sig">identity-linked, matched co-bet, large stake, near-equal, synchronized, single large bet, new account</td><td class="mono center">2</td><td><span style="color:#E5564B;font-size:10px">CONFIRMED</span></td></tr><tr><td class="mono">USR_05224</td><td class="mono center">120</td><td class="sig">identity-linked, matched co-bet, large stake, near-equal, synchronized, single large bet, new account</td><td class="mono center">2</td><td><span style="color:#E5564B;font-size:10px">CONFIRMED</span></td></tr><tr><td class="mono">USR_05276</td><td class="mono center">120</td><td class="sig">identity-linked, matched co-bet, large stake, near-equal, synchronized, single large bet, new account</td><td class="mono center">2</td><td><span style="color:#E5564B;font-size:10px">CONFIRMED</span></td></tr><tr><td class="mono">USR_05275</td><td class="mono center">120</td><td class="sig">identity-linked, matched co-bet, large stake, near-equal, synchronized, single large bet, new account</td><td class="mono center">2</td><td><span style="color:#E5564B;font-size:10px">CONFIRMED</span></td></tr><tr><td class="mono">USR_05267</td><td class="mono center">120</td><td class="sig">identity-linked, matched co-bet, large stake, near-equal, synchronized, single large bet, new account</td><td class="mono center">2</td><td><span style="color:#E5564B;font-size:10px">CONFIRMED</span></td></tr></tbody></table>
+  </div>
+
+  <footer>
+    Generated by <span style="color:var(--cyan-dim)">detect_esoccer_aml.py</span> &middot;
+    networkx identity-linkage graph + interpretable combination scoring, evaluated
+    against the Red Team's ground-truth labels. No label is used in scoring.
+    Synthetic data &mdash; no PII.
+  </footer>
+</div></body></html>
