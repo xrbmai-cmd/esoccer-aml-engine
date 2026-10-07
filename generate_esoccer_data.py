@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-generate_esoccer_data.py  —  Red Team: synthetic eSoccer sportsbook + injected laundering
-==========================================================================================
+generate_esoccer_data.py: Red Team, synthetic eSoccer sportsbook + injected laundering
+======================================================================================
 
-Part one of the **esoccer-aml-engine**. This builds the "haystack" — a realistic
-eSoccer (virtual-football) sportsbook full of chaotic legitimate bettors — and
+Part one of the **esoccer-aml-engine**. This builds the "haystack": a realistic
+eSoccer (virtual-football) sportsbook full of chaotic legitimate bettors. Then it
 hides "needles" in it: coordinated matched-betting laundering rings.
 
 The whole point of a Red Team is to make detection HARD and honest. So the
@@ -17,11 +17,14 @@ rules:
     is loose, and there's no clean sweep-and-withdraw.
   * Fast-withdrawing VIPs           -> looks like "stashing".
   * Budget micro-depositors         -> looks like "smurfing".
+  * Legit arbitrage pairs ("arbers") -> large, near-equal opposing bets on the
+    same fixtures, placed on purpose. The hardest look-alike: only the
+    cash-out separates them from a ring.
 
-The injected rings vary in tradecraft — sloppy ones share IP/device/payout and
-fire within minutes (easy to catch); careful ones use distinct IPs, staggered
-timing, and uneven stakes (the Blue Team should *miss* some of these, which is
-the honest part).
+The injected rings vary in tradecraft: sloppy ones share IP/device/payout and
+fire within minutes; careful ones use distinct IPs and staggered timing, with
+an occasional shared payout; stealth ones share nothing and use small, uneven,
+slow bets (the Blue Team should miss some of these, which is the honest part).
 
 Every user carries a ground-truth label so the Blue Team's detection can be
 scored with real precision/recall. Output: users.csv, transactions.csv,
@@ -32,7 +35,7 @@ USAGE
     python3 generate_esoccer_data.py [--users 5000] [--rings 25]
             [--output-dir ./data] [--seed 7]
 
-Author: César B. Miranda.  Data is 100% synthetic — no real PII.
+Author: César B. Miranda. Data is 100% synthetic, no real PII.
 """
 
 from __future__ import annotations
@@ -93,7 +96,7 @@ def build_fixtures(n=80):
         fx.append({
             "match_id": _nid("b", "FIX_", 4).replace("BET", "FIX"),
             "league": league, "duration_min": mins,
-            "event": f"O/U 2.5 — {a} ({ha}) vs {b} ({hb})",
+            "event": f"O/U 2.5: {a} ({ha}) vs {b} ({hb})",
             "odds_over": odds_over, "odds_under": odds_under,
             "result": "over" if random.random() < p_over else "under",
             "kickoff": kickoff,
@@ -147,7 +150,7 @@ def rand_ip():
 
 # --------------------------------------------------------------------------- #
 # 1) The haystack: legitimate bettors (chaotic, lose to the vig)
-#    A slice of them share CGNAT / household IPs — the first confounder.
+#    A slice of them share CGNAT / household IPs: the first confounder.
 # --------------------------------------------------------------------------- #
 def gen_legit(users, txns, bets, fixtures, n, shared_ips):
     for _ in range(n):
@@ -264,9 +267,10 @@ def gen_micro_depositors(users, txns, bets, fixtures, n):
 
 # --------------------------------------------------------------------------- #
 # 3b) The HARD confounder: legit high-roller arbers. They bet large, near-equal
-#     OPPOSING stakes on the same fixtures (bonus arbitrage / hedging) — exactly
-#     like matched-betting laundering — EXCEPT they keep their funds in play and
-#     never sweep. Only the sweep separates them from a ring.
+#     OPPOSING stakes on the same fixtures (bonus arbitrage / hedging), exactly
+#     like matched-betting laundering, EXCEPT they keep their funds in play and
+#     never sweep. Only the cash-out separates them from a ring, and the Blue
+#     Team does not score the cash-out yet.
 # --------------------------------------------------------------------------- #
 def gen_legit_arbers(users, txns, bets, fixtures, n_pairs):
     for _ in range(n_pairs):
@@ -290,7 +294,7 @@ def gen_legit_arbers(users, txns, bets, fixtures, n_pairs):
             place_bet(bets, None, members[1][0], fix, "under",
                       base * random.uniform(0.97, 1.03),
                       fix["kickoff"] - timedelta(minutes=random.uniform(2, 40)))
-        # they keep playing and only withdraw modestly — NO clean sweep
+        # they keep playing and only withdraw modestly: NO clean sweep
         for uid, dep in members:
             for _ in range(random.randint(5, 11)):
                 fix = random.choice(fixtures)
@@ -381,7 +385,7 @@ def naive_rule_report(users_df, bets_df):
     print(f"  Rule 'opposing bets + shared IP':   flags {r2_flagged:>4} accounts, "
           f"only {r2_tp} are fraud  -> precision {r2_tp/max(r2_flagged,1)*100:4.1f}%")
     print("  => single signals over-flag innocent households/CGNAT. The detector "
-          "must score the COMBINATION (linkage + symmetry + stake + timing + sweep).")
+          "must score the COMBINATION (linkage + symmetry + stake + timing).")
 
 
 # --------------------------------------------------------------------------- #

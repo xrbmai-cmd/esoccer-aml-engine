@@ -1,32 +1,37 @@
 #!/usr/bin/env python3
 """
-detect_esoccer_aml.py  —  Blue Team: hunt the laundering rings
-==============================================================
+detect_esoccer_aml.py: Blue Team, hunt the laundering rings
+===========================================================
 
-Part two of the **esoccer-aml-engine**. It ingests the Red Team's synthetic
+Part two of the **esoccer-aml-engine**. It reads the Red Team's synthetic
 sportsbook and hunts the matched-betting laundering rings hidden inside it.
 
-The Red Team proved that *single* signals are useless here: "shares an IP" or
-"bet opposite sides" each land at ~5% precision because innocent households and
-CGNAT users trip them constantly. So this detector scores the **combination**:
+The Red Team showed that single signals do not work here: "shares an IP" or
+"bets opposite sides" each land at about 5% precision, because innocent
+households and CGNAT users trip them all the time. So this detector adds up
+points for a combination of signals (see score_accounts):
 
-    identity linkage (networkx graph)   ── do accounts share IP / device / payout?
-  + bet symmetry                        ── opposing sides of the SAME fixture?
-  + stake magnitude                     ── is the matched stake large?
-  + stake equality                      ── are the opposing stakes near-equal?
-  + timing                              ── were they placed close together?
-  + the sweep pattern                   ── deposit -> one big bet -> fast cash-out?
+    identity linkage (networkx graph)  : shares IP, device or payout with another account?
+  + matched co-bet                     : opposite sides of the SAME fixture?
+  + stake size                         : is the matched stake large?
+  + stake equality                     : are the opposing stakes near-equal?
+  + timing                             : were the two bets placed close together?
+  + one large bet                      : at most 2 bets in total, one of them large?
+  + new account                        : registered in the last 7 days?
 
-None of these alone is fraud; together they are. The detector never sees the
-label — it is scored against it afterwards (precision / recall / F1), and the
-honest result is that it clears the legit look-alikes the naive rules drown in.
+Not scored yet: the cash-out. Deposits and withdrawals are computed in
+activity_features, but no rule uses them. That is the gap that lets the
+legit arbitrage pairs through (see the README roadmap).
+
+The detector never sees the label. It is scored against it afterwards
+(precision / recall / F1) at a threshold fixed before evaluation.
 
 USAGE
 -----
     python3 detect_esoccer_aml.py [--data ./data] [-o blue_team_dashboard.html]
 
 Builds on the Red Team output (users/transactions/bets/fixtures CSVs).
-Author: César B. Miranda.  Synthetic data — no real PII.
+Author: César B. Miranda. Synthetic data, no real PII.
 """
 
 from __future__ import annotations
@@ -56,9 +61,9 @@ def load(data_dir):
 
 
 # --------------------------------------------------------------------------- #
-# 1) Identity-linkage graph (networkx): connect accounts sharing IP/device/payout
-#    Connected components are candidate rings — and recover the whole ring from
-#    any single flagged account.
+# 1) Identity-linkage graph (networkx): connect accounts sharing IP/device/payout.
+#    Accounts in a linked cluster (2 or more accounts) get points, and the
+#    cluster size is shown in the alert table so an analyst can pull the rest.
 # --------------------------------------------------------------------------- #
 def linkage_clusters(users):
     g = nx.Graph()
@@ -79,7 +84,7 @@ def linkage_clusters(users):
 # --------------------------------------------------------------------------- #
 # 2) Matched co-bet signal: opposing sides of the same fixture, large + near-equal
 #    + close in time. Only large bets are considered (small household bets never
-#    enter — magnitude is part of the signal).
+#    enter; size is part of the signal).
 # --------------------------------------------------------------------------- #
 def matched_cobets(bets):
     big = bets[bets["stake"] >= FLOOR]
@@ -108,7 +113,8 @@ def matched_cobets(bets):
 
 
 # --------------------------------------------------------------------------- #
-# 3) Activity / sweep features per account
+# 3) Activity features per account. deposits and withdrawals are computed here
+#    but not scored yet (the cash-out gap, see the docstring).
 # --------------------------------------------------------------------------- #
 def activity_features(users, txns, bets):
     NOW = pd.Timestamp("2026-06-24 12:00:00")
@@ -184,13 +190,78 @@ def prf(flagged: set, truth: set):
 # --------------------------------------------------------------------------- #
 # Dashboard
 # --------------------------------------------------------------------------- #
+NICE = {"normal": "Legit: normal", "household": "Legit: household (look-alike)",
+        "budget": "Legit: budget micro-deposit", "vip_fast": "Legit: fast-withdraw VIP",
+        "arber": "Legit: arbitrage pair (look-alike)",
+        "matched_sloppy": "Fraud: sloppy ring", "matched_careful": "Fraud: careful ring",
+        "matched_stealth": "Fraud: stealth ring"}
+PLAIN = {"normal": "normal bettors", "household": "household accounts",
+         "budget": "budget micro-depositors", "vip_fast": "fast-withdraw VIPs",
+         "arber": "arbitrage-pair accounts", "matched_sloppy": "sloppy ring accounts",
+         "matched_careful": "careful ring accounts", "matched_stealth": "stealth ring accounts"}
+# One plain sentence per population, used only when that population shows up
+# in the false alarms or the misses of THIS run.
+FP_NOTE = {"arber": ("Arbitrage pairs place large, near-equal opposing bets on the same "
+                     "fixtures on purpose, which is the same shape as a ring. They differ "
+                     "from rings in the cash-out: a ring's winning account withdraws everything "
+                     "soon after the match, while arbers keep playing and withdraw little. "
+                     "The score does not use the cash-out yet.")}
+MISS_NOTE = {"matched_stealth": "Stealth rings share nothing and use small, uneven, slow bets."}
+GREEN, AMBER, RED = "#4FB477", "#E2A93B", "#E5564B"
+
+
+def outcome_colour(is_fraud, flagged, total):
+    """Colour by outcome, not by population: green when the detector got the
+    row right (fraud flagged, legit cleared), red when it got it wrong."""
+    right = flagged / total if is_fraud else (total - flagged) / total
+    return GREEN if right >= 0.95 else RED if right <= 0.5 else AMBER
+
+
+def insight_html(merged, combined, naive, steps, cleared, legit_total):
+    """Build the summary from the results of this run. Nothing hard-coded."""
+    fraud = merged["label"] == "fraud_ring"
+    fp_by = merged[merged["flagged"] & ~fraud]["subtype"].value_counts()
+    fn_by = merged[~merged["flagged"] & fraud]["subtype"].value_counts()
+    out = [f'<b>Measured at the threshold set before evaluation (score &ge; {FLAG_AT}).</b> '
+           f'Precision <b>{combined["precision"]*100:.0f}%</b>, recall '
+           f'<b>{combined["recall"]*100:.0f}%</b>, against <b>~{naive["precision"]*100:.0f}%</b> '
+           f'precision for the naive "shares an IP" rule. '
+           f'<b>{cleared:,} of {legit_total:,}</b> legitimate accounts cleared.']
+    if combined["fp"]:
+        top, k = fp_by.index[0], int(fp_by.iloc[0])
+        share = "All of them are" if k == combined["fp"] else f"{k} of them are"
+        out.append(f'<b>False alarms: {combined["fp"]}.</b> {share} '
+                   f'{PLAIN.get(top, top)}. {FP_NOTE.get(top, "")}')
+    if combined["fn"]:
+        if len(fn_by) == 1:
+            parts = f"all {PLAIN.get(fn_by.index[0], fn_by.index[0])}"
+        else:
+            parts = ", ".join(f"{int(v)} {PLAIN.get(sub, sub)}" for sub, v in fn_by.items())
+        notes = " ".join(MISS_NOTE[sub] for sub in fn_by.index if sub in MISS_NOTE)
+        out.append(f'<b>Missed: {combined["fn"]}</b>, {parts}. {notes}')
+        lower = [st for st in steps if st["thr"] < FLAG_AT and st["recall"] > combined["recall"]]
+        if lower:
+            st = max(lower, key=lambda x: x["thr"])
+            extra = st["tp"] - combined["tp"]
+            caught = (f"all {extra}" if extra == combined["fn"]
+                      else f"{extra} of the {combined['fn']}")
+            out.append(f'On this data, a threshold of {st["thr"]} would catch '
+                       f'{caught} missed accounts, '
+                       f'at {st["precision"]*100:.0f}% precision and {st["flagged"]} alerts. '
+                       f'The threshold was not moved: choosing it after seeing the labels '
+                       f'is tuning on the test set.')
+        else:
+            out.append("Lower thresholds do not raise recall on this data.")
+    return " ".join(x.strip() for x in out)
+
+
 def ring_svg(users, scored, flagged, truth):
     """Draw one detected ring: two mules, the shared identifier, opposing bets."""
-    tp_rings = users[(users["label"] == "fraud_ring") &
-                     (users["user_id"].isin(flagged))]
-    if tp_rings.empty:
-        return "<div style='color:#7C8794'>No ring to display.</div>"
-    ring_id = tp_rings["ring_id"].iloc[0]
+    fr = users[users["label"] == "fraud_ring"]
+    both = fr.groupby("ring_id")["user_id"].apply(lambda ids: ids.isin(flagged).all())
+    if not both.any():
+        return "<div style='color:#7C8794'>No fully flagged ring to display.</div>"
+    ring_id = sorted(both[both].index)[0]
     mules = users[users["ring_id"] == ring_id].head(2).reset_index(drop=True)
     a, b = mules.iloc[0], mules.iloc[1]
     shared = [x for x in ["ip_address", "device_id", "payout_destination"]
@@ -211,7 +282,7 @@ def ring_svg(users, scored, flagged, truth):
       <text x="165" y="88" fill="#9aa3ad" font-family="ui-monospace,monospace" font-size="9">OVER</text>
       <text x="165" y="170" fill="#9aa3ad" font-family="ui-monospace,monospace" font-size="9">UNDER</text>
       <text x="105" y="128" fill="#E2A93B" font-family="ui-monospace,monospace" font-size="9">shared {link}</text>
-      <text x="230" y="165" text-anchor="middle" fill="#7C8794" font-family="ui-monospace,monospace" font-size="10">ring {ring_id} recovered</text>
+      <text x="307" y="160" text-anchor="middle" fill="#7C8794" font-family="ui-monospace,monospace" font-size="10">ring {ring_id}: both flagged</text>
     </svg>"""
 
 
@@ -225,13 +296,10 @@ def build_dashboard(users, scored, flagged, truth, naive, steps):
     by_sub = merged.groupby("subtype").agg(total=("score", "size"),
                                            flagged=("flagged", "sum")).sort_values("total", ascending=False)
     sub_rows = ""
-    nice = {"normal": "Legit — normal", "household": "Legit — household (look-alike)",
-            "budget": "Legit — budget micro-deposit", "vip_fast": "Legit — fast-withdraw VIP",
-            "matched_sloppy": "Fraud — sloppy ring", "matched_careful": "Fraud — careful ring",
-            "matched_stealth": "Fraud — stealth ring"}
+    nice = NICE
     for sub, row in by_sub.iterrows():
         is_fraud = sub.startswith("matched")
-        col = "#E5564B" if is_fraud else "#4FB477"
+        col = outcome_colour(is_fraud, int(row["flagged"]), int(row["total"]))
         verdict = f'{int(row["flagged"])}/{int(row["total"])} flagged'
         sub_rows += (f'<tr><td>{nice.get(sub, sub)}</td>'
                      f'<td class="mono right">{int(row["total"])}</td>'
@@ -274,10 +342,11 @@ def build_dashboard(users, scored, flagged, truth, naive, steps):
     cleared = int(by_sub.loc[[s for s in by_sub.index if not s.startswith("matched")], "total"].sum()
                   - by_sub.loc[[s for s in by_sub.index if not s.startswith("matched")], "flagged"].sum())
     legit_total = int(by_sub.loc[[s for s in by_sub.index if not s.startswith("matched")], "total"].sum())
+    insight = insight_html(merged, combined, naive, steps, cleared, legit_total)
 
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>eSoccer AML — Blue Team</title>
+<title>eSoccer AML: Blue Team</title>
 <style>
   :root {{ --bg:#0B0E12; --panel:#13181F; --line:#232A33; --ink:#E6EAEF;
     --muted:#7C8794; --cyan:#3FB6C9; --cyan-dim:#1f5a64; --risk:#E5564B;
@@ -321,7 +390,7 @@ def build_dashboard(users, scored, flagged, truth, naive, steps):
 </style></head><body><div class="wrap">
   <header>
     <div class="title"><span class="cyan">&#9670;</span> eSOCCER AML &nbsp;&middot;&nbsp;
-      <b>Blue Team — Ring Detection</b></div>
+      <b>Blue Team: Ring Detection</b></div>
     <div class="meta">NETWORKX + COMBINATION SCORING<br>SYNTHETIC SPORTSBOOK &middot; {n:,} ACCOUNTS</div>
   </header>
 
@@ -335,30 +404,20 @@ def build_dashboard(users, scored, flagged, truth, naive, steps):
   </div>
 
   <div class="insight">
-    <b>Two honest limits, not a perfect score.</b> Naive single-signal rules flag
-    every shared-IP household and land at <b>~{naive["precision"]*100:.0f}%</b>
-    precision. Scoring the full combination lifts that to
-    <b>{combined["precision"]*100:.0f}%</b> at <b>{combined["recall"]*100:.0f}%</b>
-    recall, clearing <b>{cleared:,} of {legit_total:,}</b> legitimate accounts —
-    but it catches the <i>obvious</i> rings and <b>misses the stealth ones</b>
-    (small, uneven, slow washes that sit under the threshold). And precision caps
-    here: a residual set of legitimate bettors place coincidental large opposing
-    co-bets that are behaviourally <i>indistinguishable</i> from washing on
-    transaction data alone. Closing either gap costs the other — tighter rules
-    miss more stealth, looser rules flood analysts. Real resolution needs context
-    behaviour can't see: KYC, source-of-funds, cross-book history.
+    {insight}
   </div>
 
   <div class="grid">
     <div class="card">
-      <h2>Who got flagged — fraud vs. the look-alikes</h2>
-      <p class="sub">The naive rules drowned in the green rows. This detector clears them.</p>
+      <h2>Who got flagged: fraud vs. the look-alikes</h2>
+      <p class="sub">Coloured by outcome. Green: right (fraud flagged, legit cleared).
+        Amber: partly wrong. Red: mostly wrong.</p>
       <table><thead><tr><th>Population</th><th class="right">Accounts</th><th class="right">Flagged</th></tr></thead>
       <tbody>{sub_rows}</tbody></table>
     </div>
     <div class="card">
       <h2>One recovered ring</h2>
-      <p class="sub">Linkage + matched bet reconstruct the pair.</p>
+      <p class="sub">Two accounts of one ring, both flagged, and what links them.</p>
       {ring_svg(users, scored, flagged, truth)}
       <div class="legend"><span><i style="background:#E5564B"></i>flagged mule</span>
         <span><i style="background:#E2A93B"></i>shared identifier</span>
@@ -369,12 +428,13 @@ def build_dashboard(users, scored, flagged, truth, naive, steps):
   <div class="grid">
     <div class="card">
       <h2>Recall by ring tradecraft</h2>
-      <p class="sub">Sloppy rings are easy; careful rings (no shared IP) are the test.</p>
+      <p class="sub">Sloppy rings share IP, device and payout. Careful rings share little.
+        Stealth rings share nothing and bet small.</p>
       {soph_rows}
     </div>
     <div class="card">
       <h2>Precision / recall vs. threshold</h2>
-      <p class="sub">The operating-point tradeoff (row in use: {FLAG_AT}).</p>
+      <p class="sub">Row in use: {FLAG_AT}, fixed before evaluation.</p>
       <table><thead><tr><th class="center">Score &ge;</th><th class="right">Flagged</th>
       <th class="right">Prec.</th><th class="right">Recall</th><th class="right">F1</th></tr></thead>
       <tbody>{sweep_rows}</tbody></table>
@@ -392,7 +452,7 @@ def build_dashboard(users, scored, flagged, truth, naive, steps):
     Generated by <span style="color:var(--cyan-dim)">detect_esoccer_aml.py</span> &middot;
     networkx identity-linkage graph + interpretable combination scoring, evaluated
     against the Red Team's ground-truth labels. No label is used in scoring.
-    Synthetic data &mdash; no PII.
+    Synthetic data, no PII.
   </footer>
 </div></body></html>"""
 
