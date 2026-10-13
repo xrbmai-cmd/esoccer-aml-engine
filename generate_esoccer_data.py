@@ -32,7 +32,7 @@ bets.csv, fixtures.csv.
 
 USAGE
 -----
-    python3 generate_esoccer_data.py [--users 5000] [--rings 25]
+    python3 generate_esoccer_data.py [--users 5000] [--rings 32]
             [--output-dir ./data] [--seed 7]
 
 Author: César B. Miranda. Data is 100% synthetic, no real PII.
@@ -394,7 +394,7 @@ def naive_rule_report(users_df, bets_df):
 def main():
     ap = argparse.ArgumentParser(description="Red Team: synthetic eSoccer sportsbook + laundering")
     ap.add_argument("--users", type=int, default=5000, help="legitimate bettors")
-    ap.add_argument("--rings", type=int, default=25, help="matched-betting rings to inject")
+    ap.add_argument("--rings", type=int, default=32, help="matched-betting rings to inject")
     ap.add_argument("--output-dir", default="./data")
     ap.add_argument("--seed", type=int, default=7)
     args = ap.parse_args()
